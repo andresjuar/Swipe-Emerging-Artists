@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Discovery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;600;700&display=swap">
+<style>
+/* Layout: one centered column, a single artist card at a time, like a swipe deck */
+:root {
+  --bg: #0d0a12;
+  --surface: #1a1422;
+  --line: #2e2440;
+  --fg: #f3eefa;
+  --muted: #a99bbd;
+  --accent: #e45cc4;
+  --like: #3ccf91;
+  --nope: #ff6b6b;
+  --display: "Unbounded", "Arial Black", sans-serif;
+  --body: "Manrope", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: max(20px, env(safe-area-inset-top, 0px));
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+}
+main { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; min-height: 100%; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.brand { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+.brand span { color: var(--accent); }
+.stats { display: flex; gap: 8px; font-size: 13px; font-weight: 600; }
+.pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pill b { color: var(--fg); }
+h1 { font-family: var(--display); font-weight: 700; font-size: 28px; line-height: 1.15; margin: 0; text-wrap: balance; }
+p { margin: 0; line-height: 1.5; color: var(--muted); }
+label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+input[type=text] {
+  width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); font: inherit; font-size: 17px;
+}
+input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { font: inherit; cursor: pointer; border: 0; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.primary { background: var(--accent); color: #fff; font-weight: 700; padding: 14px; border-radius: 12px; width: 100%; font-size: 16px; }
+.primary:disabled { opacity: .4; cursor: default; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+
+.progress { display: flex; gap: 6px; }
+.progress i { flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.progress i.done { background: var(--accent); }
+
+.card {
+  position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 24px;
+  padding: 24px; display: flex; flex-direction: column; gap: 16px; touch-action: pan-y; user-select: none;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.card.dragging { transition: none; }
+.cover {
+  aspect-ratio: 1; max-width: 100%; border-radius: 16px; display: grid; place-items: center;
+  font-family: var(--display); font-size: 64px; font-weight: 700; color: rgba(255,255,255,.9);
+}
+.artist { font-family: var(--display); font-size: 24px; font-weight: 700; margin: 0; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--line); color: var(--fg); }
+.listen { color: var(--accent); font-weight: 700; text-decoration: none; }
+.stamp {
+  position: absolute; top: 28px; padding: 6px 12px; border: 3px solid; border-radius: 8px;
+  font-family: var(--display); font-weight: 700; font-size: 18px; opacity: 0; pointer-events: none;
+}
+.stamp.like { left: 28px; color: var(--like); transform: rotate(-12deg); }
+.stamp.nope { right: 28px; color: var(--nope); transform: rotate(12deg); }
+
+.actions { display: flex; justify-content: center; gap: 28px; }
+.round {
+  width: 68px; height: 68px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line);
+  font-size: 28px; display: grid; place-items: center;
+}
+.round.nope { color: var(--nope); }
+.round.like { color: var(--like); }
+.round:active { transform: scale(.94); }
+
+.badge { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+.badge .ico { font-size: 28px; }
+.badge strong { display: block; }
+.badge small { color: var(--muted); }
+.switch { background: none; color: var(--accent); font-weight: 700; padding: 0; font-size: 12px; }
+.foot { margin-top: auto; text-align: center; font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<script>
+/* ============ EDIT THIS EACH DAY ============ */
+// Paste your Google Apps Script web app URL here (see setup notes). Leave empty to test locally.
+const SHEET_URL = "";
+
+// Today's selection. Replace these example entries with real emerging artists.
+const ARTISTS = [
+  { name: "Example Artist 1", genre: "Indie pop",   city: "Guadalajara", link: "https://open.spotify.com/" },
+  { name: "Example Artist 2", genre: "Alt R&B",     city: "CDMX",        link: "https://open.spotify.com/" },
+  { name: "Example Artist 3", genre: "Shoegaze",    city: "Monterrey",   link: "https://open.spotify.com/" },
+  { name: "Example Artist 4", genre: "Corridos",    city: "Tijuana",     link: "https://open.spotify.com/" },
+  { name: "Example Artist 5", genre: "Electrónica", city: "Puebla",      link: "https://open.spotify.com/" },
+];
+/* ============================================ */
+
+const params = new URLSearchParams(location.search);
+const SOURCE = params.get("src") || "direct";        // use ?src=wa in WhatsApp messages
+const TODAY = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local time
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+const key = n => n.trim().toLowerCase();  // "Ximena " and "ximena" are the same person
+let screen = "";
+let state = {};
+function loadUser(name) {
+  const k = key(name);
+  state = {
+    name,
+    days: name ? store.get("dd_days_" + k, []) : [],             // dates this name completed
+    votes: name ? store.get("dd_votes_" + k + "_" + TODAY, {}) : {}, // artist -> like/dislike today
+  };
+}
+loadUser(params.get("u") || store.get("dd_name", ""));
+
+// Pull this name's completed days from the sheet, so the streak follows the name across devices.
+async function syncDays() {
+  if (!SHEET_URL || !state.name) return;
+  const name = state.name;
+  try {
+    const r = await fetch(SHEET_URL + "?name=" + encodeURIComponent(key(name)));
+    const j = await r.json();
+    if (name !== state.name || !Array.isArray(j.days)) return;
+    state.days = [...new Set([...state.days, ...j.days])];
+    store.set("dd_days_" + key(name), state.days);
+    if (screen === "done") render();
+    else { const el = document.getElementById("streak"); if (el) el.textContent = streak(); }
+  } catch {}
+}
+
+function send(row) {
+  const payload = { ...row, name: state.name, day: TODAY, source: SOURCE, ts: new Date().toISOString() };
+  if (!SHEET_URL) { console.log("vote (not sent, SHEET_URL empty)", payload); return; }
+  fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) })
+    .catch(() => {});
+}
+
+function streak() {
+  let s = 0, d = new Date();
+  const set = new Set(state.days);
+  if (!set.has(TODAY)) d.setDate(d.getDate() - 1);
+  while (set.has(d.toLocaleDateString("en-CA"))) { s++; d.setDate(d.getDate() - 1); }
+  return s;
+}
+
+function hue(str) { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
+const app = document.getElementById("app");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function header() {
+  return `<header>
+    <div class="brand">Daily<span>.</span>Discovery</div>
+    <div class="stats">
+      <span class="pill">🔥 <b id="streak">${streak()}</b> day streak</span>
+    </div>
+  </header>`;
+}
+
+function renderLogin() {
+  screen = "login";
+  app.innerHTML = header() + `
+    <div class="stack" style="margin-top:24px">
+      <h1>Today's emerging artists are ready.</h1>
+      <p>${ARTISTS.length} new artists, picked for today. Like or skip each one, and come back every day to keep your streak.</p>
+    </div>
+    <form id="login" class="stack">
+      <label for="name">Your name</label>
+      <input id="name" type="text" autocomplete="name" placeholder="e.g. Ximena" value="${esc(state.name)}" required>
+      <button class="primary" type="submit">Start discovering</button>
+    </form>
+    <p class="foot">We only use your name to count visits for a class project.</p>`;
+  document.getElementById("login").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = document.getElementById("name").value.trim();
+    if (!v) return;
+    store.set("dd_name", v);
+    loadUser(v);
+    render();
+    syncDays();
+  });
+}
+
+function renderCard(i) {
+  screen = "card";
+  const a = ARTISTS[i];
+  const h = hue(a.name);
+  app.innerHTML = header() + `
+    <div class="progress">${ARTISTS.map((_, j) => `<i class="${j < i ? "done" : ""}"></i>`).join("")}</div>
+    <article class="card" id="card">
+      <div class="stamp like" id="sLike">LIKE</div>
+      <div class="stamp nope" id="sNope">NOPE</div>
+      <div class="cover" style="background:linear-gradient(135deg,hsl(${h} 70% 45%),hsl(${(h + 60) % 360} 70% 30%))">${esc(a.name[0])}</div>
+      <div class="stack">
+        <h2 class="artist">${esc(a.name)}</h2>
+        <div class="meta"><span class="tag">${esc(a.genre)}</span><span class="tag">${esc(a.city)}</span></div>
+      </div>
+      <a class="listen" href="${esc(a.link)}" target="_blank" rel="noopener">▶ Listen first</a>
+    </article>
+    <div class="actions">
+      <button class="round nope" id="nope" aria-label="Dislike">✕</button>
+      <button class="round like" id="like" aria-label="Like">♥</button>
+    </div>
+    <p class="foot">Hi ${esc(state.name)} · swipe right to like, left to skip · <button class="switch" id="switch" type="button">Not you?</button></p>`;
+  document.getElementById("switch").onclick = () => { store.set("dd_name", ""); loadUser(""); render(); };
+
+  const card = document.getElementById("card");
+  const vote = v => {
+    state.votes[a.name] = v; store.set("dd_votes_" + key(state.name) + "_" + TODAY, state.votes);
+    send({ artist: a.name, vote: v });
+    card.style.transform = `translateX(${v === "like" ? 120 : -120}%) rotate(${v === "like" ? 15 : -15}deg)`;
+    card.style.opacity = 0;
+    setTimeout(render, 220);
+  };
+  document.getElementById("like").onclick = () => vote("like");
+  document.getElementById("nope").onclick = () => vote("dislike");
+
+  // swipe gesture
+  let x0 = null, dx = 0;
+  card.addEventListener("pointerdown", e => { if (e.target.closest("a")) return; x0 = e.clientX; card.classList.add("dragging"); card.setPointerCapture(e.pointerId); });
+  card.addEventListener("pointermove", e => {
+    if (x0 === null) return;
+    dx = e.clientX - x0;
+    card.style.transform = `translateX(${dx}px) rotate(${dx / 20}deg)`;
+    document.getElementById("sLike").style.opacity = Math.max(0, dx / 100);
+    document.getElementById("sNope").style.opacity = Math.max(0, -dx / 100);
+  });
+  const end = () => {
+    if (x0 === null) return;
+    card.classList.remove("dragging"); x0 = null;
+    if (dx > 90) vote("like"); else if (dx < -90) vote("dislike");
+    else { card.style.transform = ""; document.getElementById("sLike").style.opacity = 0; document.getElementById("sNope").style.opacity = 0; }
+    dx = 0;
+  };
+  card.addEventListener("pointerup", end);
+  card.addEventListener("pointercancel", end);
+}
+
+function renderDone() {
+  screen = "done";
+  if (!state.days.includes(TODAY)) {
+    state.days.push(TODAY); store.set("dd_days_" + key(state.name), state.days);
+    send({ artist: "", vote: "completed" });
+  }
+  const s = streak();
+  const liked = Object.values(state.votes).filter(v => v === "like").length;
+  const badges = [
+    { ok: true,   ico: "🎧", t: "Daily Discoverer",  d: "Finished today's selection" },
+    { ok: s >= 3, ico: "🔥", t: "3-Day Streak",      d: s >= 3 ? "Unlocked" : `${3 - s} more day(s) to unlock` },
+    { ok: s >= 7, ico: "💎", t: "Early Supporter",   d: s >= 7 ? "Unlocked" : `${7 - s} more day(s) to unlock` },
+  ];
+  app.innerHTML = header() + `
+    <div class="stack" style="margin-top:16px">
+      <h1>Done for today, ${esc(state.name)}.</h1>
+      <p>You liked ${liked} of ${ARTISTS.length} artists. A new selection drops tomorrow. Come back to keep your streak.</p>
+    </div>
+    <div class="stack">
+      ${badges.map(b => `<div class="badge" style="opacity:${b.ok ? 1 : .45}"><span class="ico">${b.ico}</span><div><strong>${b.t}</strong><small>${b.d}</small></div></div>`).join("")}
+    </div>
+    <p class="foot">Save this page so you can find it tomorrow.</p>`;
+}
+
+function render() {
+  if (!state.name) return renderLogin();
+  const next = ARTISTS.findIndex(a => !state.votes[a.name]);
+  if (next === -1) return renderDone();
+  if (!store.get("dd_visit_" + TODAY, false)) { store.set("dd_visit_" + TODAY, true); send({ artist: "", vote: "visit" }); }
+  renderCard(next);
+}
+render();
+syncDays();
+</script>
+</body>
+</html>
