@@ -66,6 +66,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   aspect-ratio: 1; max-width: 100%; border-radius: 16px; display: grid; place-items: center;
   font-family: var(--display); font-size: 64px; font-weight: 700; color: rgba(255,255,255,.9);
 }
+.embed { display: block; width: 100%; max-width: 100%; border: 0; border-radius: 12px; background: var(--line); }
+.embed.yt { aspect-ratio: 16 / 9; height: auto; }
 .artist { font-family: var(--display); font-size: 24px; font-weight: 700; margin: 0; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--line); color: var(--fg); }
@@ -159,6 +161,21 @@ function streak() {
   return s;
 }
 
+// Turns a Spotify or YouTube link from the sheet into an embedded player. Returns "" for other links.
+function player(link) {
+  if (!link) return "";
+  let m = link.match(/open\.spotify\.com\/(?:[a-z-]+\/)?(track|album|artist|playlist)\/([A-Za-z0-9]+)/);
+  if (m) {
+    const tall = m[1] !== "track";
+    return `<iframe class="embed" style="height:${tall ? 352 : 152}px" src="https://open.spotify.com/embed/${m[1]}/${m[2]}" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="Spotify player"></iframe>`;
+  }
+  m = link.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/))([\w-]{11})/);
+  if (m) {
+    return `<iframe class="embed yt" src="https://www.youtube-nocookie.com/embed/${m[1]}?rel=0&playsinline=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy" title="YouTube player"></iframe>`;
+  }
+  return "";
+}
+
 function hue(str) { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) % 360; return h; }
 const app = document.getElementById("app");
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -205,12 +222,12 @@ function renderCard(i) {
     <article class="card" id="card">
       <div class="stamp like" id="sLike">LIKE</div>
       <div class="stamp nope" id="sNope">NOPE</div>
-      <div class="cover" style="background:linear-gradient(135deg,hsl(${h} 70% 45%),hsl(${(h + 60) % 360} 70% 30%))">${esc(a.name[0])}</div>
+      ${player(a.link) || `<div class="cover" style="background:linear-gradient(135deg,hsl(${h} 70% 45%),hsl(${(h + 60) % 360} 70% 30%))">${esc(a.name[0])}</div>`}
       <div class="stack">
         <h2 class="artist">${esc(a.name)}</h2>
         <div class="meta"><span class="tag">${esc(a.genre)}</span><span class="tag">${esc(a.city)}</span></div>
       </div>
-      <a class="listen" href="${esc(a.link)}" target="_blank" rel="noopener">▶ Listen first</a>
+      ${a.link ? `<a class="listen" href="${esc(a.link)}" target="_blank" rel="noopener">${player(a.link) ? "Open in app ↗" : "▶ Listen first"}</a>` : ""}
     </article>
     <div class="actions">
       <button class="round nope" id="nope" aria-label="Dislike">✕</button>
