@@ -99,18 +99,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 <main id="app"></main>
 
 <script>
-/* ============ EDIT THIS EACH DAY ============ */
-// Paste your Google Apps Script web app URL here (see setup notes). Leave empty to test locally.
+/* ============ SETUP (once) ============ */
+// Paste your Google Apps Script web app URL here. Daily songs then come from the sheet's "songs" tab.
 const SHEET_URL = "https://script.google.com/macros/s/AKfycbx9Q1CBG1za3pchwP3XGHajtibEqoBE4IgkRWPF87KcN_C1G5Fez-rpYh-EHnZAJ65Lug/exec";
 
-// Today's selection. Replace these example entries with real emerging artists.
-const ARTISTS = [
-  { name: "Example Artist 1", genre: "Indie pop",   city: "Guadalajara", link: "https://open.spotify.com/" },
-  { name: "Example Artist 2", genre: "Alt R&B",     city: "CDMX",        link: "https://open.spotify.com/" },
-  { name: "Example Artist 3", genre: "Shoegaze",    city: "Monterrey",   link: "https://open.spotify.com/" },
-  { name: "Example Artist 4", genre: "Corridos",    city: "Tijuana",     link: "https://open.spotify.com/" },
-  { name: "Example Artist 5", genre: "Electrónica", city: "Puebla",      link: "https://open.spotify.com/" },
-];
+// Filled from the sheet's "songs" tab for today's date.
+let ARTISTS = [];
 /* ============================================ */
 
 const params = new URLSearchParams(location.search);
@@ -281,15 +275,39 @@ function renderDone() {
     <p class="foot">Save this page so you can find it tomorrow.</p>`;
 }
 
+function renderMessage(title, text) {
+  screen = "message";
+  app.innerHTML = header() + `<div class="stack" style="margin-top:24px"><h1>${esc(title)}</h1><p>${esc(text)}</p></div>`;
+}
+
+// Loads today's rows from the "songs" tab of the sheet.
+async function loadSongs() {
+  if (!SHEET_URL) return false;
+  try {
+    const r = await fetch(SHEET_URL + "?songs=" + TODAY);
+    const j = await r.json();
+    ARTISTS = Array.isArray(j.songs) ? j.songs : [];
+    return true;
+  } catch { return false; }
+}
+
+async function boot() {
+  renderMessage("Loading today's artists…", "One second.");
+  const ok = await loadSongs();
+  if (!ok) return renderMessage("Couldn't load today's artists.", "Check your connection and refresh the page.");
+  render();
+  syncDays();
+}
+
 function render() {
   if (!state.name) return renderLogin();
+  if (!ARTISTS.length) return renderMessage("No new artists today.", "Today's selection isn't ready yet. Check back later.");
   const next = ARTISTS.findIndex(a => !state.votes[a.name]);
   if (next === -1) return renderDone();
   if (!store.get("dd_visit_" + TODAY, false)) { store.set("dd_visit_" + TODAY, true); send({ artist: "", vote: "visit" }); }
   renderCard(next);
 }
-render();
-syncDays();
+boot();
 </script>
 </body>
 </html>
