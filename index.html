@@ -272,7 +272,8 @@ function renderDone() {
     <div class="stack">
       ${badges.map(b => `<div class="badge" style="opacity:${b.ok ? 1 : .45}"><span class="ico">${b.ico}</span><div><strong>${b.t}</strong><small>${b.d}</small></div></div>`).join("")}
     </div>
-    <p class="foot">Save this page so you can find it tomorrow.</p>`;
+    <p class="foot">Save this page so you can find it tomorrow. · <button class="switch" id="switch" type="button">Not you? Change name</button></p>`;
+  document.getElementById("switch").onclick = () => { store.set("dd_name", ""); loadUser(""); render(); };
 }
 
 function renderMessage(title, text) {
