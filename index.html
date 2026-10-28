@@ -124,7 +124,13 @@ let ARTISTS = [];
 /* ============================================ */
 
 const params = new URLSearchParams(location.search);
-const SOURCE = params.get("src") || "direct";        // use ?src=wa in WhatsApp messages
+// Where this visit came from: ?source=whatsapp or ?source=flyer. Anything else counts as "direct".
+const SOURCE = (params.get("source") || params.get("src") || "direct").trim().toLowerCase().slice(0, 30);
+// Clean the address bar so a saved bookmark doesn't keep reporting the original source.
+if (params.has("source") || params.has("src")) {
+  params.delete("source"); params.delete("src");
+  try { history.replaceState(null, "", location.pathname + (params.toString() ? "?" + params : "") + location.hash); } catch {}
+}
 const TODAY = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD, local time
 
 const store = {
@@ -292,6 +298,10 @@ function renderCard(i) {
   card.addEventListener("pointercancel", end);
 }
 
+// Link friends receive; their visits are saved with source = "recommendation".
+const SHARE_URL = location.origin + location.pathname + "?src=recommendation";
+const SHARE_TEXT = "I'm discovering a new emerging artist every day here. Try it:";
+
 function renderDone() {
   screen = "done";
   if (!state.days.includes(TODAY)) {
@@ -313,7 +323,24 @@ function renderDone() {
     <div class="stack">
       ${badges.map(b => `<div class="badge" style="opacity:${b.ok ? 1 : .45}"><span class="ico">${b.ico}</span><div><strong>${b.t}</strong><small>${b.d}</small></div></div>`).join("")}
     </div>
+    <div class="stack">
+      <button class="primary" id="share" type="button">Recommend to a friend</button>
+      <a class="listen" style="text-align:center" href="https://wa.me/?text=${encodeURIComponent(SHARE_TEXT + " " + SHARE_URL)}" target="_blank" rel="noopener">Send on WhatsApp</a>
+      <p id="shareMsg" style="text-align:center" hidden></p>
+    </div>
     <p class="foot">Save this page so you can find it tomorrow. · <button class="switch" id="switch" type="button">Not you? Change name</button></p>`;
+  document.getElementById("share").onclick = async () => {
+    const msg = document.getElementById("shareMsg");
+    try {
+      if (navigator.share) { await navigator.share({ title: "Daily Discovery", text: SHARE_TEXT, url: SHARE_URL }); return; }
+      await navigator.clipboard.writeText(SHARE_TEXT + " " + SHARE_URL);
+      msg.textContent = "Link copied. Paste it to a friend.";
+    } catch (e) {
+      if (e && e.name === "AbortError") return; // closed the share sheet
+      msg.textContent = SHARE_URL;              // last resort: show the link to copy by hand
+    }
+    msg.hidden = false;
+  };
   document.getElementById("switch").onclick = () => { store.set("dd_name", ""); loadUser(""); render(); };
 }
 
