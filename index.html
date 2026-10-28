@@ -102,8 +102,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 <script>
 /* ============ SETUP (once) ============ */
-// Paste your Google Apps Script web app URL here. Daily songs then come from the sheet's "songs" tab.
-const SHEET_URL = "https://script.google.com/macros/s/AKfycbx9Q1CBG1za3pchwP3XGHajtibEqoBE4IgkRWPF87KcN_C1G5Fez-rpYh-EHnZAJ65Lug/exec";
+// From Supabase > Project Settings > API: the Project URL and the publishable (or "anon public") key.
+// Never paste the secret / service_role key here.
+const SUPABASE_URL = "https://xarvlsdshotxvqchdjty.supabase.co";   // e.g. "https://abcd1234.supabase.co"
+const SUPABASE_KEY = "sb_publishable_7ZlLVpoH2yZmjT1-Pq-5BA_vtsaBCbA";
+
+// Calls the get_today function: today's songs + the completed days for a name.
+async function getToday(name) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("Supabase not configured");
+  const r = await fetch(SUPABASE_URL + "/rest/v1/rpc/get_today", {
+    method: "POST",
+    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_day: TODAY, p_name: name ? key(name) : null }),
+  });
+  if (!r.ok) throw new Error("get_today " + r.status);
+  return r.json();
+}
 
 // Filled from the sheet's "songs" tab for today's date.
 let ARTISTS = [];
@@ -133,24 +147,34 @@ loadUser(params.get("u") || store.get("dd_name", ""));
 
 // Pull this name's completed days from the sheet, so the streak follows the name across devices.
 async function syncDays() {
-  if (!SHEET_URL || !state.name) return;
+  if (!state.name) return;
   const name = state.name;
   try {
-    const r = await fetch(SHEET_URL + "?name=" + encodeURIComponent(key(name)));
-    const j = await r.json();
-    if (name !== state.name || !Array.isArray(j.days)) return;
-    state.days = [...new Set([...state.days, ...j.days])];
-    store.set("dd_days_" + key(name), state.days);
-    if (screen === "done") render();
-    else { const el = document.getElementById("streak"); if (el) el.textContent = streak(); }
+    const j = await getToday(name);
+    applyDays(name, j.days);
   } catch {}
 }
 
+function applyDays(name, days) {
+  if (name !== state.name || !Array.isArray(days)) return;
+  state.days = [...new Set([...state.days, ...days])];
+  store.set("dd_days_" + key(name), state.days);
+  if (screen === "done") render();
+  else { const el = document.getElementById("streak"); if (el) el.textContent = streak(); }
+}
+
 function send(row) {
-  const payload = { ...row, name: state.name, day: TODAY, source: SOURCE, ts: new Date().toISOString() };
-  if (!SHEET_URL) { console.log("vote (not sent, SHEET_URL empty)", payload); return; }
-  fetch(SHEET_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload) })
-    .catch(() => {});
+  const payload = {
+    name: state.name, name_key: key(state.name), day: TODAY,
+    artist: row.artist || null, vote: row.vote, source: SOURCE,
+  };
+  if (!SUPABASE_URL || !SUPABASE_KEY) { console.log("vote (not sent, Supabase not configured)", payload); return; }
+  fetch(SUPABASE_URL + "/rest/v1/responses", {
+    method: "POST",
+    keepalive: true, // still sends if the person closes the page right after voting
+    headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 function streak() {
@@ -298,27 +322,36 @@ function renderMessage(title, text) {
   app.innerHTML = header() + `<div class="stack" style="margin-top:24px"><h1>${esc(title)}</h1><p>${esc(text)}</p></div>`;
 }
 
-// Loads today's rows from the "songs" tab of the sheet.
+// Today's songs: shown instantly from this phone's cache if it already loaded them today,
+// then refreshed from the sheet in the background.
+let songsStatus = "loading"; // loading | ok | error
+const cachedSongs = store.get("dd_songs_" + TODAY, null);
+if (cachedSongs) { ARTISTS = cachedSongs; songsStatus = "ok"; }
+
+// One request gets today's songs and (if we know the name) the streak days.
 async function loadSongs() {
-  if (!SHEET_URL) return false;
+  const name = state.name;
   try {
-    const r = await fetch(SHEET_URL + "?songs=" + TODAY);
-    const j = await r.json();
-    ARTISTS = Array.isArray(j.songs) ? j.songs : [];
-    return true;
-  } catch { return false; }
+    const j = await getToday(name);
+    if (!Array.isArray(j.songs)) throw new Error("bad response");
+    ARTISTS = j.songs; songsStatus = "ok";
+    store.set("dd_songs_" + TODAY, j.songs);
+    applyDays(name, j.days);
+  } catch {
+    if (songsStatus !== "ok") songsStatus = "error";
+  }
+  if (screen === "message") render(); // only leave the loading screen; never interrupt typing or swiping
 }
 
-async function boot() {
-  renderMessage("Loading today's artists…", "One second.");
-  const ok = await loadSongs();
-  if (!ok) return renderMessage("Couldn't load today's artists.", "Check your connection and refresh the page.");
-  render();
-  syncDays();
+function boot() {
+  render();      // name screen appears immediately; songs load while the person types
+  loadSongs();
 }
 
 function render() {
   if (!state.name) return renderLogin();
+  if (songsStatus === "loading") return renderMessage("Loading today's artists…", "One second.");
+  if (songsStatus === "error") return renderMessage("Couldn't load today's artists.", "Check your connection and refresh the page.");
   if (!ARTISTS.length) return renderMessage("No new artists today.", "Today's selection isn't ready yet. Check back later.");
   const next = ARTISTS.findIndex(a => !state.votes[a.name]);
   if (next === -1) return renderDone();
